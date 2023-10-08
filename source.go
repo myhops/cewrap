@@ -4,15 +4,14 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
-	"log/slog"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
-
 )
 
 type EventData struct {
@@ -38,7 +37,7 @@ type Source struct {
 	// Dataschema for the event.
 	Dataschema string
 
-	Logger slog.Logger
+	Logger *slog.Logger
 }
 
 var DefaultChangeMethods = []string{
@@ -57,7 +56,7 @@ func (s *Source) isChange(method string) bool {
 	return false
 }
 
-func NewSource(downstream, sink string, client *http.Client, changeMethods []string) *Source {
+func NewSource(downstream, sink string, client *http.Client, changeMethods []string, logger *slog.Logger) *Source {
 	s := &Source{}
 	if client == nil {
 		s.Client = http.DefaultClient
@@ -75,6 +74,13 @@ func NewSource(downstream, sink string, client *http.Client, changeMethods []str
 	if len(s.ChangeMethods) == 0 {
 		s.ChangeMethods = DefaultChangeMethods
 	}
+	if logger == nil {
+		logger = slog.Default()
+	}
+	s.Logger = logger.With(
+		slog.String("service", "Source"),
+	)
+
 	return s
 }
 
@@ -85,8 +91,13 @@ func (s *Source) buildDownstreamRequest(ctx context.Context, r *http.Request) (*
 		return nil, err
 	}
 
+	du, err := url.JoinPath(s.Downstream.String(), r.URL.Path)
+	if err != nil {
+		return nil, err
+	}
+
 	// Create the request.
-	req, err := http.NewRequestWithContext(ctx, r.Method, s.Downstream.String(), &body)
+	req, err := http.NewRequestWithContext(ctx, r.Method, du, &body)
 	if err != nil {
 		return nil, err
 	}
@@ -118,37 +129,56 @@ func (s *Source) buildDownstreamRequest(ctx context.Context, r *http.Request) (*
 // It passes the request to the downstream service and generates a cloud event
 // and sends it to the sink.
 func (s *Source) Handle(w http.ResponseWriter, r *http.Request) {
+	// create logger
+	logger := s.Logger.With(slog.String("operation", "Handle"))
+
+	defer func(start time.Time) {
+		logger.Info("Handle served", slog.Duration("duration", time.Since(start)))
+	}(time.Now())
+
 	// Build a client request from the server request.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	cr, err := s.buildDownstreamRequest(ctx, r)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		logger.Error("error building downstream request", slog.String("err", err.Error()))
 		return
 	}
+	logger.Info("build the client request",
+		slog.Group("client_request",
+			slog.String("host", cr.Host),
+			slog.String("path", cr.URL.Path),
+		),
+	)
 
 	// Call the downstream service.
 	resp, err := s.Client.Do(cr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		logger.Error("error calling downstream service", slog.String("err", err.Error()))
 		return
 	}
+	logger.Info("called the downstream service")
 
 	// Create the response and write it out to the responseWriter.
 	err = s.writeResponse(w, resp)
 	if err != nil {
-		// Write an internal error.
+		logger.Error("error sending the response", slog.String("err", err.Error()))
+		return
 	}
 
 	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
 		// We are done.
-		return
+		return // Write an internal error.
 	}
+
 	if !s.isChange(r.Method) {
 		return
 	}
 	// Only run when we have an events sink.
 	if s.Sink == nil {
+		logger.Info("sink is nil")
 		return
 	}
 	evt := cloudevents.NewEvent()
@@ -172,7 +202,11 @@ func (s *Source) Handle(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 	)
-	s.sendEvent(r.Context(), evt)
+	err = s.sendEvent(r.Context(), evt)
+	if err != nil {
+		logger.Error("sending event error", slog.String("err", err.Error()))
+	}
+	logger.Info("event sent", slog.String("event", evt.String()))
 }
 
 func (s *Source) sendEvent(ctx context.Context, evt cloudevents.Event) error {

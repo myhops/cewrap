@@ -39,6 +39,33 @@ A successful post request to `http://service.example.com/persons/id12345` resour
 | -type     | CEW_TYPE_PREFIX | The prefix for the type. |
 | -dataschema | CEW_DATASCHEMA | The URL for the dataschema of the event data. |
 | -downstream | CEW_DOWNSTREAM | Downstream service. |
-| -port | PORT | Listening port of the wrapper. |
-| -change-methods | CEW_CHANGE_METHODS |  Comma seperated list of methods that should generate events. Use this to specify less than the default state changing methods. |
+| -port | PORT | Listening port of the wrapper, defaults to 8080. |seperated list of methods that should generate events. Use this to specify less than the default state changing methods. |
 | -extra-methods | CEW_EXTRA_METHODS | Extra methods to add to the standard state changing methods |
+
+
+## Test setup
+
+Run go-httpbin on port 9090.
+
+```bash
+podman run --rm -p 9090:8080 docker.io/mccutchen/go-httpbin:v2.11.1
+```
+
+Run cesourcewrap on port 8080.
+
+```bash
+podman run --rm \
+    -p 8080:8080 \
+    -e CEW_SINK=http://192.168.0.202:10000 \
+    -e CEW_DOWNSTREAM=http://192.168.0.202:9090 \
+    -e CEW_EXTRA_METHODS=GET \
+    docker.io/peterzandbergen/cesourcewrap:v0.0.1
+```
+
+Run event display on port 10000
+
+```bash
+podman run --rm \
+    -p 10000:80 \
+    gcr.io/knative-releases/knative.dev/eventing/cmd/event_display
+```

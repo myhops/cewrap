@@ -30,7 +30,7 @@ func TestHandle(t *testing.T) {
 		Client:        &http.Client{},
 		Sink:          sink,
 		ChangeMethods: DefaultChangeMethods,
-		Logger: slog.Default(),
+		Logger:        slog.Default(),
 	}
 
 	rr := httptest.NewRecorder()

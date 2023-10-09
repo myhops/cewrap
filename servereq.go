@@ -1,0 +1,171 @@
+package cewrap
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+	"io"
+	"log/slog"
+	"net/http"
+	"net/url"
+	"strings"
+	"time"
+
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/google/uuid"
+)
+
+type serviceRequest struct {
+	s      *Source
+	logger *slog.Logger
+
+	ctx context.Context
+
+	responseBody []byte
+	method       string
+	requestPath  string
+}
+
+func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	logger := s.logger
+	// Build a client request from the server request.
+	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+	defer cancel()
+	cr, err := s.buildDownstreamRequest(ctx, r)
+	if err != nil {
+		return fmt.Errorf("error building downstream request: %w", err)
+	}
+	logger.Info("build the client request",
+		slog.Group("client_request",
+			slog.String("host", cr.Host),
+			slog.String("path", cr.URL.Path),
+		),
+	)
+
+	// Call the downstream service.
+	resp, err := s.s.Client.Do(cr)
+	if err != nil {
+		return fmt.Errorf("error calling downstream service: %w", err)
+	}
+	// Save the body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return fmt.Errorf("error reading downstream response body: %w", err)
+	}
+
+	logger.Info("called the downstream service")
+	// Create the response and write it out to the responseWriter.
+	err = s.writeResponse(w, resp, bytes.NewReader(body))
+	if err != nil {
+		logger.Error("error sending the response", slog.String("err", err.Error()))
+		return fmt.Errorf("error sending the response: %w", err)
+	}
+
+	if !s.s.isEmitEvent(r.Method) {
+		return nil
+	}
+
+	// Save event data.
+	s.responseBody = body
+	s.saveEventData(r)
+	s.emitEvent(ctx)
+	return nil
+}
+
+func (s *serviceRequest) emitEvent(ctx context.Context) error {
+	evt := cloudevents.NewEvent()
+	id, _ := uuid.NewUUID()
+	evt.Context.SetID(id.String())
+	evt.Context.SetSource(s.requestPath)
+	evt.Context.SetType(s.s.TypePrefix + strings.ToLower(s.method)+"_handled")
+
+	return s.sendEvent(ctx, evt)
+}
+
+func (s *serviceRequest) sendEvent(ctx context.Context, evt cloudevents.Event) error {
+	evtCtx, evtCancel := context.WithTimeout(ctx, time.Second)
+	defer evtCancel()
+	result := s.s.Sink.Send(evtCtx, evt)
+
+	if !cloudevents.IsACK(result) {
+		return result
+	}
+	return nil
+}
+
+func (s *serviceRequest) buildDownstreamRequest(ctx context.Context, r *http.Request) (*http.Request, error) {
+	// Get the body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	// Build the downstream path.
+	du, err := url.JoinPath(s.s.Downstream.String(), r.URL.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the request.
+	req, err := http.NewRequestWithContext(ctx, r.Method, du, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	// header filter
+	hf := func(h string) bool {
+		switch strings.ToLower(h) {
+		case "content-length":
+			return false
+		default:
+			return true
+		}
+	}
+
+	// Copy the headers.
+	for k, h := range r.Header {
+		if hf(k) {
+			for _, hh := range h {
+				req.Header.Add(k, hh)
+			}
+		}
+	}
+
+	return req, nil
+}
+
+func (s *serviceRequest) writeResponse(w http.ResponseWriter, resp *http.Response, body io.Reader) error {
+	// Copy the headers.
+	for k, h := range resp.Header {
+		for _, hh := range h {
+			w.Header().Add(k, hh)
+		}
+	}
+
+	// Write the headers with the status code.
+	w.WriteHeader(resp.StatusCode)
+
+	// Write the body.
+	if _, err := io.Copy(w, body); err != nil {
+		return fmt.Errorf("error parsing content-length: %w", err)
+	}
+	return nil
+}
+
+// buildEvent builds a cloud event.
+//
+// It uses the req to derive the subject and the type.
+// It uses the
+func (s *serviceRequest) saveEventData(req *http.Request) {
+	evt := cloudevents.NewEvent()
+	evt.SetSource("bla.source")
+
+	us := &url.URL{}
+	us.Scheme = req.URL.Scheme
+	us.Host = req.Host
+	us.Path = req.URL.Path
+	us.Scheme = "http"
+
+	s.requestPath = us.String()
+	s.method = req.Method
+}

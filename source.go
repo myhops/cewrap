@@ -15,9 +15,7 @@ import (
 )
 
 type EventData struct {
-	Method       string `json:"method"`
-	Resource     string `json:"resource"`
-	ResourceData any    `json:"resource_data"`
+	ResourceData any `json:"resource_data"`
 }
 
 type Source struct {
@@ -86,18 +84,19 @@ func NewSource(downstream, sink string, client *http.Client, changeMethods []str
 
 func (s *Source) buildDownstreamRequest(ctx context.Context, r *http.Request) (*http.Request, error) {
 	// Get the body.
-	body := bytes.Buffer{}
-	if _, err := io.Copy(&body, r.Body); err != nil {
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
 		return nil, err
 	}
 
+	// Build the downstream path.
 	du, err := url.JoinPath(s.Downstream.String(), r.URL.Path)
 	if err != nil {
 		return nil, err
 	}
 
 	// Create the request.
-	req, err := http.NewRequestWithContext(ctx, r.Method, du, &body)
+	req, err := http.NewRequestWithContext(ctx, r.Method, du, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -124,70 +123,102 @@ func (s *Source) buildDownstreamRequest(ctx context.Context, r *http.Request) (*
 	return req, nil
 }
 
-// Handle handles the requests.
+// Handler returns a HandlerFunc that handles the requests.
 //
 // It passes the request to the downstream service and generates a cloud event
 // and sends it to the sink.
-func (s *Source) Handle(w http.ResponseWriter, r *http.Request) {
-	// create logger
+//
+// TODO: Save the response body as bytes because we need it for the event.
+func (s *Source) Handler() http.HandlerFunc {
+	// Initialize the variables common to all requests.
 	logger := s.Logger.With(slog.String("operation", "Handle"))
 
-	defer func(start time.Time) {
-		logger.Info("Handle served", slog.Duration("duration", time.Since(start)))
-	}(time.Now())
+	return func(w http.ResponseWriter, r *http.Request) {
+		defer func(start time.Time) {
+			logger.Info("Handle served", slog.Duration("duration", time.Since(start)))
+		}(time.Now())
 
-	// Build a client request from the server request.
-	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
-	defer cancel()
-	cr, err := s.buildDownstreamRequest(ctx, r)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		logger.Error("error building downstream request", slog.String("err", err.Error()))
-		return
-	}
-	logger.Info("build the client request",
-		slog.Group("client_request",
-			slog.String("host", cr.Host),
-			slog.String("path", cr.URL.Path),
-		),
-	)
+		// Build a client request from the server request.
+		ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
+		defer cancel()
+		cr, err := s.buildDownstreamRequest(ctx, r)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			logger.Error("error building downstream request", slog.String("err", err.Error()))
+			return
+		}
+		logger.Info("build the client request",
+			slog.Group("client_request",
+				slog.String("host", cr.Host),
+				slog.String("path", cr.URL.Path),
+			),
+		)
 
-	// Call the downstream service.
-	resp, err := s.Client.Do(cr)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		logger.Error("error calling downstream service", slog.String("err", err.Error()))
-		return
-	}
-	logger.Info("called the downstream service")
+		// Call the downstream service.
+		resp, err := s.Client.Do(cr)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			logger.Error("error calling downstream service", slog.String("err", err.Error()))
+			return
+		}
+		logger.Info("called the downstream service")
 
-	// Create the response and write it out to the responseWriter.
-	err = s.writeResponse(w, resp)
-	if err != nil {
-		logger.Error("error sending the response", slog.String("err", err.Error()))
-		return
-	}
+		// Create the response and write it out to the responseWriter.
+		err = s.writeResponse(w, resp)
+		if err != nil {
+			logger.Error("error sending the response", slog.String("err", err.Error()))
+			return
+		}
 
-	if resp.StatusCode < 200 && resp.StatusCode >= 300 {
-		// We are done.
-		return // Write an internal error.
-	}
+		if resp.StatusCode < 200 && resp.StatusCode >= 300 {
+			// We are done.
+			return // Write an internal error.
+		}
 
-	if !s.isChange(r.Method) {
-		return
+		if !s.isChange(r.Method) {
+			return
+		}
+		// Only run when we have an events sink.
+		if s.Sink == nil {
+			logger.Info("sink is nil")
+			return
+		}
+
+		evt := cloudevents.NewEvent()
+		evt.SetSource("bla.source")
+
+		us := &url.URL{}
+		us.Scheme = r.URL.Scheme
+		us.Host = r.Host
+		us.Path = r.URL.Path
+		us.Scheme = "http"
+
+		sub := us.String()
+		evt.SetSubject(sub)
+		evt.SetType("my.type")
+		evt.SetData("application/json",
+			EventData{},
+		)
+		err = s.sendEvent(r.Context(), evt)
+		if err != nil {
+			logger.Error("sending event error", slog.String("err", err.Error()))
+		}
+		logger.Info("event sent", slog.String("event", evt.String()))
 	}
-	// Only run when we have an events sink.
-	if s.Sink == nil {
-		logger.Info("sink is nil")
-		return
-	}
+}
+
+// buildEvent builds a cloud event.
+//
+// It uses the req to derive the subject and the type.
+// It uses the
+func (s *Source) buildEvent(req *http.Request, resp *http.Response) (*cloudevents.Event, error) {
 	evt := cloudevents.NewEvent()
 	evt.SetSource("bla.source")
 
 	us := &url.URL{}
-	us.Scheme = r.URL.Scheme
-	us.Host = r.Host
-	us.Path = r.URL.Path
+	us.Scheme = req.URL.Scheme
+	us.Host = req.Host
+	us.Path = req.URL.Path
 	us.Scheme = "http"
 
 	sub := us.String()
@@ -195,18 +226,9 @@ func (s *Source) Handle(w http.ResponseWriter, r *http.Request) {
 	evt.SetType("my.type")
 	evt.SetData("application/json",
 		EventData{
-			Method:   r.Method,
-			Resource: sub,
-			ResourceData: map[string]any{
-				"name": "Peter",
-			},
 		},
 	)
-	err = s.sendEvent(r.Context(), evt)
-	if err != nil {
-		logger.Error("sending event error", slog.String("err", err.Error()))
-	}
-	logger.Info("event sent", slog.String("event", evt.String()))
+	return &evt, nil
 }
 
 func (s *Source) sendEvent(ctx context.Context, evt cloudevents.Event) error {

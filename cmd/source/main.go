@@ -22,5 +22,5 @@ func main() {
 	}
 	s := cewrap.NewSource(opts.downstream, opts.sink, nil, opts.changeMethods, newLogger())
 
-	http.ListenAndServe(":"+opts.port, http.HandlerFunc(s.Handle))
+	http.ListenAndServe(":"+opts.port, s.Handler())
 }

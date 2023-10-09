@@ -4,7 +4,7 @@ WORKDIR /work
 COPY go.mod go.sum ./
 RUN go mod download -x
 COPY . ./ 
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main ./cmd/source
+RUN CGO_ENABLED=0 go build -o main ./cmd/source
 
 FROM scratch
 COPY --from=builder /work/main /main

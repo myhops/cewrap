@@ -2,6 +2,7 @@ package cewrap
 
 import (
 	"bytes"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -29,11 +30,12 @@ func TestHandle(t *testing.T) {
 		Client:        &http.Client{},
 		Sink:          sink,
 		ChangeMethods: DefaultChangeMethods,
+		Logger: slog.Default(),
 	}
 
 	rr := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodPost, "/path", bytes.NewBufferString("Hallo daar"))
-	s.Handle(rr, req)
+	s.Handler()(rr, req)
 	buf := make([]byte, rr.Body.Len())
 	rr.Body.Read(buf)
 	bs := string(buf)

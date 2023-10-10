@@ -80,7 +80,7 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 	id, _ := uuid.NewUUID()
 	evt.SetID(id.String())
 	evt.SetSource(s.s.source)
-	evt.SetType(s.s.typePrefix + strings.ToLower(s.method) + typeSuffix)
+	evt.SetType(s.s.typePrefix + "." + strings.ToLower(s.method) + typeSuffix)
 	evt.SetSubject(s.requestPath)
 
 	const jsonType = "application/json"
@@ -95,6 +95,7 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 		evt.SetData(s.contentType, s.responseBody)
 	}
 
+	s.logger.Info("about to send event")
 	return s.sendEvent(ctx, evt)
 }
 

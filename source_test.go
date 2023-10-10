@@ -32,7 +32,7 @@ func TestHandle(t *testing.T) {
 		sink:          sink,
 		changeMethods: DefaultChangeMethods,
 		logger:        slog.Default(),
-		source: "https://testservice.example.com/testapi",
+		source:        "https://testservice.example.com/testapi",
 		// PathPrefix: "/testapi",
 	}
 

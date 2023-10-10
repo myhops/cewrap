@@ -124,6 +124,8 @@ func TestArgsEnv(t *testing.T) {
 				sink:       "http://example.com/sink",
 				port:       "9090",
 				downstream: "http://example.com/downstream",
+				logFormat:  "text",
+				logLevel:   "info",
 			},
 		},
 		{
@@ -142,6 +144,8 @@ func TestArgsEnv(t *testing.T) {
 				sink:       "http://example.com/sink",
 				port:       "9090",
 				downstream: "http://example.com/downstream",
+				logFormat:  "text",
+				logLevel:   "info",
 			},
 		},
 		{
@@ -160,6 +164,8 @@ func TestArgsEnv(t *testing.T) {
 				sink:       "http://example.com/sink",
 				port:       "9090",
 				downstream: "http://example.com/downstream",
+				logFormat:  "text",
+				logLevel:   "info",
 			},
 		},
 		{
@@ -179,16 +185,17 @@ func TestArgsEnv(t *testing.T) {
 				"-downstream", "http://example.com/downstream",
 			},
 			want: &options{
-				sink:       "http://example.com/sink",
-				port:       "9090",
-				downstream: "http://example.com/downstream",
+				sink:          "http://example.com/sink",
+				port:          "9090",
+				downstream:    "http://example.com/downstream",
 				changeMethods: []string{"PUT", "POST"},
-				source: "source",
-				dataschema: "dataschema",
-				typePrefix: "typeprefix",
+				source:        "source",
+				dataschema:    "dataschema",
+				typePrefix:    "typeprefix",
+				logFormat:     "text",
+				logLevel:      "info",
 			},
 		},
-
 	}
 
 	for _, cc := range cases {

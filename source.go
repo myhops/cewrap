@@ -53,7 +53,6 @@ func NewSource(options ...sourceOption) *Source {
 		opt(s)
 	}
 
-
 	if s.client == nil {
 		s.client = http.DefaultClient
 	}
@@ -98,10 +97,16 @@ func (s *Source) Handler() http.HandlerFunc {
 			logger.Error("error calling downstream", slog.String("err", err.Error()))
 			return
 		}
+		logger.Info("successfully proxied request")
 
 		if !s.isEmitEvent(r.Method) {
+			logger.Info("skip emitting event")
 			return
 		}
-		svcReq.emitEvent(ctx)
+		err = svcReq.emitEvent(ctx)
+		if err != nil {
+			logger.Error("emitEvent failed", slog.String("err", err.Error()))
+		}
+		logger.Info("emitted event")
 	}
 }

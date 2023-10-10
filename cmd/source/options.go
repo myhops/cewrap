@@ -23,6 +23,8 @@ type options struct {
 	changeMethods []string
 	typePrefix    string
 	pathPrefix    string
+	logFormat     string
+	logLevel      string
 }
 
 func (o *options) setChangeMethods(mlist string) {
@@ -87,6 +89,10 @@ func (o *options) getEnv(env []string) error {
 			o.setChangeMethods(v)
 		case "CEW_EXTRA_METHODS":
 			o.appendChangeMethods(v)
+		case "CEW_LOG_FORMAT":
+			o.logFormat = v
+		case "CEW_LOG_LEVEL":
+			o.logLevel = v
 		}
 	}
 	return nil
@@ -103,6 +109,8 @@ func (o *options) parseArgs(args []string) error {
 	pathPrefix := fs.String("path-prefix", "", "path prefix is removed from the subject")
 	changeMethods := fs.String("change-methods", "", "override the default change methods, do not use together with extra-methods")
 	extraMethods := fs.String("extra-methods", "", "additional methods to trigger an event on, do not use together with change-methods")
+	logFormat := fs.String("log-format", "", "log format, json or text")
+	logLevel := fs.String("log-level", "", "log level, debug, info, warn, error")
 
 	if err := fs.Parse(args); err != nil {
 		return err
@@ -131,6 +139,12 @@ func (o *options) parseArgs(args []string) error {
 	}
 	if *extraMethods != "" {
 		o.appendChangeMethods(*extraMethods)
+	}
+	if *logFormat != "" {
+		o.logFormat = *logFormat
+	}
+	if *logLevel != "" {
+		o.logLevel = *logLevel
 	}
 
 	return nil
@@ -169,6 +183,21 @@ func (o *options) validate() error {
 	if o.port == "" {
 		o.port = "8080"
 	}
+	// Check logformat
+	switch o.logFormat {
+	case "text", "json":
+		break
+	default:
+		o.logFormat = "text"
+	}
+	// Check logformat
+	switch o.logLevel {
+	case "debug", "info", "warn", "error":
+		break
+	default:
+		o.logLevel = "info"
+	}
+
 	return nil
 }
 
@@ -192,3 +221,4 @@ func (o *options) getSourceOptions() (cewrap.SourceOptions, error) {
 	)
 	return so, nil
 }
+

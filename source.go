@@ -15,22 +15,24 @@ type EventData struct {
 
 type Source struct {
 	// The downstream service.
-	Downstream *url.URL
+	downstream *url.URL
 	// sink is the url that sinks the events
-	Sink cloudevents.Client
+	sink cloudevents.Client
 	// HTTP client for sending the downstream requests.
-	Client *http.Client
+	client *http.Client
 	// Methods that indicate a change and will generate an event.
-	ChangeMethods []string
+	changeMethods []string
 
 	// Event source.
-	Source string
+	source string
 	// Type prefix for the event type field.
-	TypePrefix string
+	typePrefix string
+	// Path prefix, when set, removes the prefix from the path that is set in the event source.
+	pathPrefix string
 	// Dataschema for the event.
-	Dataschema string
+	dataschema string
 
-	Logger *slog.Logger
+	logger *slog.Logger
 }
 
 var DefaultChangeMethods = []string{
@@ -41,7 +43,7 @@ var DefaultChangeMethods = []string{
 }
 
 func (s *Source) isChange(method string) bool {
-	for _, m := range s.ChangeMethods {
+	for _, m := range s.changeMethods {
 		if method == m {
 			return true
 		}
@@ -49,36 +51,30 @@ func (s *Source) isChange(method string) bool {
 	return false
 }
 
-func NewSource(downstream, sink string, client *http.Client, changeMethods []string, logger *slog.Logger) *Source {
+// func NewSource(downstream, sink string, client *http.Client, changeMethods []string, logger *slog.Logger) *Source {
+func NewSource(options ...sourceOption) *Source {
 	s := &Source{}
-	if client == nil {
-		s.Client = http.DefaultClient
+	for _, opt := range options {
+		opt(s)
 	}
-	var err error
-	s.Downstream, err = url.Parse(downstream)
-	if err != nil {
-		return nil
-	}
-	s.Sink, err = cloudevents.NewClientHTTP(cloudevents.WithTarget(sink))
-	if err != nil {
-		return nil
-	}
-	s.ChangeMethods = changeMethods
-	if len(s.ChangeMethods) == 0 {
-		s.ChangeMethods = DefaultChangeMethods
-	}
-	if logger == nil {
-		logger = slog.Default()
-	}
-	s.Logger = logger.With(
-		slog.String("service", "Source"),
-	)
 
+
+	if s.client == nil {
+		s.client = http.DefaultClient
+	}
+	if len(s.changeMethods) == 0 {
+		s.changeMethods = DefaultChangeMethods
+	}
+	if s.logger == nil {
+		s.logger = slog.Default().With(
+			slog.String("service", "Source"),
+		)
+	}
 	return s
 }
 
 func (s *Source) isEmitEvent(method string) bool {
-	return s.Sink != nil && s.isChange(method)
+	return s.sink != nil && s.isChange(method)
 }
 
 // Handler returns a HandlerFunc that handles the requests.
@@ -89,7 +85,7 @@ func (s *Source) isEmitEvent(method string) bool {
 // TODO: Save the response body as bytes because we need it for the event.
 func (s *Source) Handler() http.HandlerFunc {
 	// Initialize the variables common to all requests.
-	logger := s.Logger.With(slog.String("operation", "Handle"))
+	logger := s.logger.With(slog.String("operation", "Handle"))
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		defer func(start time.Time) {
@@ -109,9 +105,9 @@ func (s *Source) Handler() http.HandlerFunc {
 			logger.Error("error calling downstream", slog.String("err", err.Error()))
 			return
 		}
-		
+
 		if !s.isEmitEvent(r.Method) {
-			return 
+			return
 		}
 		svcReq.emitEvent(ctx)
 	}

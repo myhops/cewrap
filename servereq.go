@@ -44,7 +44,7 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 	)
 
 	// Call the downstream service.
-	resp, err := s.s.Client.Do(cr)
+	resp, err := s.s.client.Do(cr)
 	if err != nil {
 		return fmt.Errorf("error calling downstream service: %w", err)
 	}
@@ -74,11 +74,13 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 }
 
 func (s *serviceRequest) emitEvent(ctx context.Context) error {
+	const typeSuffix = "_handled"
+
 	evt := cloudevents.NewEvent()
 	id, _ := uuid.NewUUID()
 	evt.SetID(id.String())
-	evt.SetSource(s.s.Source)
-	evt.SetType(s.s.TypePrefix + strings.ToLower(s.method) + "_handled")
+	evt.SetSource(s.s.source)
+	evt.SetType(s.s.typePrefix + strings.ToLower(s.method) + typeSuffix)
 	evt.SetSubject(s.requestPath)
 
 	const jsonType = "application/json"
@@ -99,7 +101,7 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 func (s *serviceRequest) sendEvent(ctx context.Context, evt cloudevents.Event) error {
 	evtCtx, evtCancel := context.WithTimeout(ctx, time.Second)
 	defer evtCancel()
-	result := s.s.Sink.Send(evtCtx, evt)
+	result := s.s.sink.Send(evtCtx, evt)
 
 	if !cloudevents.IsACK(result) {
 		return result
@@ -115,7 +117,7 @@ func (s *serviceRequest) buildDownstreamRequest(ctx context.Context, r *http.Req
 	}
 
 	// Build the downstream path.
-	du, err := url.JoinPath(s.s.Downstream.String(), r.URL.Path)
+	du, err := url.JoinPath(s.s.downstream.String(), r.URL.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -177,5 +179,9 @@ func (s *serviceRequest) saveRequestData(r *http.Request) {
 	us.Scheme = "http"
 
 	s.requestPath = us.Path
+	if strings.Index(s.requestPath, s.s.pathPrefix) == 0 {
+		s.requestPath = s.requestPath[len(s.s.pathPrefix):]
+	}
+
 	s.method = r.Method
 }

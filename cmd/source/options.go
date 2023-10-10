@@ -8,6 +8,10 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/cloudevents/sdk-go/v2/client"
+	"github.com/myhops/cewrap"
 )
 
 type options struct {
@@ -18,6 +22,7 @@ type options struct {
 	dataschema    string
 	changeMethods []string
 	typePrefix    string
+	pathPrefix    string
 }
 
 func (o *options) setChangeMethods(mlist string) {
@@ -76,6 +81,8 @@ func (o *options) getEnv(env []string) error {
 			o.typePrefix = v
 		case "CEW_DATASCHEMA":
 			o.dataschema = v
+		case "CEW_PATH_PREFIX":
+			o.pathPrefix = v
 		case "CEW_CHANGE_METHODS":
 			o.setChangeMethods(v)
 		case "CEW_EXTRA_METHODS":
@@ -93,6 +100,7 @@ func (o *options) parseArgs(args []string) error {
 	sink := fs.String("sink", "", "url of the event sink")
 	typePrefix := fs.String("type", "", "type prefix")
 	dataschema := fs.String("dataschema", "", "dataschema")
+	pathPrefix := fs.String("path-prefix", "", "path prefix is removed from the subject")
 	changeMethods := fs.String("change-methods", "", "override the default change methods, do not use together with extra-methods")
 	extraMethods := fs.String("extra-methods", "", "additional methods to trigger an event on, do not use together with change-methods")
 
@@ -114,6 +122,9 @@ func (o *options) parseArgs(args []string) error {
 	}
 	if *dataschema != "" {
 		o.dataschema = *dataschema
+	}
+	if *pathPrefix != "" {
+		o.pathPrefix = *pathPrefix
 	}
 	if *changeMethods != "" {
 		o.setChangeMethods(*changeMethods)
@@ -159,4 +170,25 @@ func (o *options) validate() error {
 		o.port = "8080"
 	}
 	return nil
+}
+
+func (o *options) getSourceOptions() (cewrap.SourceOptions, error) {
+	var so cewrap.SourceOptions
+
+	// create the sink
+	sink, err := client.NewHTTP(cloudevents.WithTarget(o.sink))
+	if err != nil {
+		return nil, err
+	}
+
+	so = append(so,
+		cewrap.WithDownstream(o.downstream),
+		cewrap.WithChangeMethods(o.changeMethods),
+		cewrap.WithSource(o.source),
+		cewrap.WithDataschema(o.dataschema),
+		cewrap.WithTypePrefix(o.typePrefix),
+		cewrap.WithPathPrefix(o.pathPrefix),
+		cewrap.WithSink(sink),
+	)
+	return so, nil
 }

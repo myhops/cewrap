@@ -1,7 +1,6 @@
 package main
 
 import (
-	"log"
 	"log/slog"
 	"net/http"
 	"os"
@@ -16,11 +15,26 @@ func newLogger() *slog.Logger {
 }
 
 func main() {
+	logger := newLogger()
 	opts, err := getOptions()
 	if err != nil {
-		log.Fatalf("options failed: %v", err)
+		logger.Error("failed to get options", slog.String("err", err.Error()))
+		return
 	}
-	s := cewrap.NewSource(opts.downstream, opts.sink, nil, opts.changeMethods, newLogger())
 
-	http.ListenAndServe(":"+opts.port, s.Handler())
+	so, err := opts.getSourceOptions()
+	if err != nil {
+		logger.Error("error creating sink", slog.String("err", err.Error()))
+		return
+	}
+
+	// Add the logger.
+	so = append(so, cewrap.WithLogger(logger))
+	// Create the source.
+	s := cewrap.NewSource(so...)
+
+	// Start server with the source.
+	if err := http.ListenAndServe(":"+opts.port, s.Handler()); err != nil {
+		logger.Error("server stopped", slog.String("err", err.Error()))
+	}
 }

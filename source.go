@@ -47,7 +47,6 @@ func (s *Source) isChange(method string) bool {
 	return false
 }
 
-// func NewSource(downstream, sink string, client *http.Client, changeMethods []string, logger *slog.Logger) *Source {
 func NewSource(options ...sourceOption) *Source {
 	s := &Source{}
 	for _, opt := range options {
@@ -77,8 +76,6 @@ func (s *Source) isEmitEvent(method string) bool {
 //
 // It passes the request to the downstream service and generates a cloud event
 // and sends it to the sink.
-//
-// TODO: Save the response body as bytes because we need it for the event.
 func (s *Source) Handler() http.HandlerFunc {
 	// Initialize the variables common to all requests.
 	logger := s.logger.With(slog.String("operation", "Handle"))

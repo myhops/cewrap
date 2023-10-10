@@ -24,6 +24,7 @@ type serviceRequest struct {
 	responseBody []byte
 	method       string
 	requestPath  string
+	contentType  string
 }
 
 func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
@@ -48,7 +49,7 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 		return fmt.Errorf("error calling downstream service: %w", err)
 	}
 	// Save the body.
-	body, err := io.ReadAll(r.Body)
+	body, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return fmt.Errorf("error reading downstream response body: %w", err)
 	}
@@ -67,17 +68,30 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 
 	// Save event data.
 	s.responseBody = body
-	s.saveEventData(r)
-	s.emitEvent(ctx)
+	s.contentType = resp.Header.Get("content-type")
+	s.saveRequestData(cr)
 	return nil
 }
 
 func (s *serviceRequest) emitEvent(ctx context.Context) error {
 	evt := cloudevents.NewEvent()
 	id, _ := uuid.NewUUID()
-	evt.Context.SetID(id.String())
-	evt.Context.SetSource(s.requestPath)
-	evt.Context.SetType(s.s.TypePrefix + strings.ToLower(s.method)+"_handled")
+	evt.SetID(id.String())
+	evt.SetSource(s.s.Source)
+	evt.SetType(s.s.TypePrefix + strings.ToLower(s.method) + "_handled")
+	evt.SetSubject(s.requestPath)
+
+	const jsonType = "application/json"
+
+	// Set the data
+	if strings.Index(s.contentType, jsonType) == 0 {
+		// Copied from Event.SetData for data is not a byte array.
+		evt.SetDataContentType(jsonType)
+		evt.DataEncoded = s.responseBody
+		evt.DataBase64 = false
+	} else {
+		evt.SetData(s.contentType, s.responseBody)
+	}
 
 	return s.sendEvent(ctx, evt)
 }
@@ -152,20 +166,16 @@ func (s *serviceRequest) writeResponse(w http.ResponseWriter, resp *http.Respons
 	return nil
 }
 
-// buildEvent builds a cloud event.
+// saveRequestData saves data for the event.
 //
 // It uses the req to derive the subject and the type.
-// It uses the
-func (s *serviceRequest) saveEventData(req *http.Request) {
-	evt := cloudevents.NewEvent()
-	evt.SetSource("bla.source")
-
+func (s *serviceRequest) saveRequestData(r *http.Request) {
 	us := &url.URL{}
-	us.Scheme = req.URL.Scheme
-	us.Host = req.Host
-	us.Path = req.URL.Path
+	us.Scheme = r.URL.Scheme
+	us.Host = r.Host
+	us.Path = r.URL.Path
 	us.Scheme = "http"
 
-	s.requestPath = us.String()
-	s.method = req.Method
+	s.requestPath = us.Path
+	s.method = r.Method
 }

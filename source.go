@@ -109,7 +109,10 @@ func (s *Source) Handler() http.HandlerFunc {
 			logger.Error("error calling downstream", slog.String("err", err.Error()))
 			return
 		}
-
+		
+		if !s.isEmitEvent(r.Method) {
+			return 
+		}
 		svcReq.emitEvent(ctx)
 	}
 }

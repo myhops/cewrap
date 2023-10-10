@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	cloudevents "github.com/cloudevents/sdk-go/v2"
 	"github.com/cloudevents/sdk-go/v2/client"
 	"github.com/cloudevents/sdk-go/v2/client/test"
 )
@@ -31,26 +32,28 @@ func TestHandle(t *testing.T) {
 		Sink:          sink,
 		ChangeMethods: DefaultChangeMethods,
 		Logger:        slog.Default(),
+		Source: "https://testservice.example.com/testapi",
 	}
 
 	rr := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodPost, "/path", bytes.NewBufferString("Hallo daar"))
+	req := httptest.NewRequest(http.MethodPost, "/testapi/path", bytes.NewBufferString("Hallo daar"))
 	s.Handler()(rr, req)
 	buf := make([]byte, rr.Body.Len())
 	rr.Body.Read(buf)
-	bs := string(buf)
+	// bs := string(buf)
 
 	time.Sleep(time.Second)
 
 	// Read the events from the channel
-	var ed EventData
+	var evt cloudevents.Event
+	var text string
 	select {
-	case evt := <-echan:
+	case evt = <-echan:
 		t.Logf("event received: %v", evt)
-		evt.DataAs(&ed)
+		text = string(evt.Data())
 
 	default:
 		t.Errorf("no event received")
 	}
-	t.Logf("done, %s", bs)
+	t.Logf("done, %s", text)
 }

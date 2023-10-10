@@ -8,18 +8,6 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
-type sourceOptions struct {
-	downstream    string
-	sink          string
-	client        *http.Client
-	changeMethods []string
-	source        string
-	typePrefix    string
-	pathPrefix    string
-	dataSchema    string
-	logger        *slog.Logger
-}
-
 type sourceOption func(s *Source)
 type SourceOptions []sourceOption
 

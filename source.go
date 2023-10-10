@@ -9,10 +9,6 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
-type EventData struct {
-	ResourceData any `json:"resource_data"`
-}
-
 type Source struct {
 	// The downstream service.
 	downstream *url.URL

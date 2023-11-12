@@ -28,7 +28,8 @@ type serviceRequest struct {
 }
 
 func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	logger := s.logger
+	logger := s.logger.With(slog.String("receiver_method", "callDownstream"))
+
 	// Build a client request from the server request.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
@@ -48,8 +49,10 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 	if err != nil {
 		return fmt.Errorf("error calling downstream service: %w", err)
 	}
+
 	// Save the body.
 	body, err := io.ReadAll(resp.Body)
+	resp.Body.Close()
 	if err != nil {
 		return fmt.Errorf("error reading downstream response body: %w", err)
 	}
@@ -116,6 +119,7 @@ func (s *serviceRequest) buildDownstreamRequest(ctx context.Context, r *http.Req
 	if err != nil {
 		return nil, err
 	}
+	r.Body.Close()
 
 	// Build the downstream path.
 	du, err := url.JoinPath(s.s.downstream.String(), r.URL.Path)
@@ -129,28 +133,16 @@ func (s *serviceRequest) buildDownstreamRequest(ctx context.Context, r *http.Req
 		return nil, err
 	}
 
-	// header filter
-	hf := func(h string) bool {
-		switch strings.ToLower(h) {
-		case "content-length":
-			return false
-		default:
-			return true
-		}
-	}
-
 	// Copy the headers.
 	for k, h := range r.Header {
-		if hf(k) {
-			for _, hh := range h {
-				req.Header.Add(k, hh)
-			}
+		for _, hh := range h {
+			req.Header.Add(k, hh)
 		}
 	}
-
 	return req, nil
 }
 
+// writeResponse writes the info from resp to w.
 func (s *serviceRequest) writeResponse(w http.ResponseWriter, resp *http.Response, body io.Reader) error {
 	// Copy the headers.
 	for k, h := range resp.Header {

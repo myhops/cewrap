@@ -99,10 +99,13 @@ func (s *Source) Handler() http.HandlerFunc {
 		}
 		logger.Info("successfully proxied request")
 
+		// Check if an event needs to be emitted.
 		if !s.isEmitEvent(r.Method) {
 			logger.Info("skip emitting event")
 			return
 		}
+		// Emit the event.
+		logger.Info("emitting event")
 		err = svcReq.emitEvent(ctx)
 		if err != nil {
 			logger.Error("emitEvent failed", slog.String("err", err.Error()))

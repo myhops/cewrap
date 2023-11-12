@@ -15,32 +15,41 @@ import (
 )
 
 type options struct {
-	downstream    string
-	port          string
-	sink          string
-	source        string
-	dataschema    string
-	changeMethods []string
-	typePrefix    string
-	pathPrefix    string
-	logFormat     string
-	logLevel      string
+	downstream string
+	port       string
+	sink       string
+	source     string
+	dataschema string
+	typePrefix string
+	pathPrefix string
+	logFormat  string
+	logLevel   string
+
+	changeMethods    []string
+	changeMethodsSet bool
 }
 
+// setChangeMethods sets the change methods from mlist.
+// 	mlist contains the methods separated by a comma.
 func (o *options) setChangeMethods(mlist string) {
-	o.changeMethods = nil
-	o.appendChangeMethods(mlist)
+	if len(o.changeMethods) == 0 {
+		o.appendChangeMethods(mlist)
+		o.changeMethodsSet = true
+	}
 }
 
+// appendChangeMethods appends the methods in the list to the change methods.
 func (o *options) appendChangeMethods(mlist string) {
 	m := strings.Split(mlist, ",")
 	o.changeMethods = append(o.changeMethods, m...)
 }
 
-// args is without the program name as first parameter
+// getOptionsFrom gets the options from the cli arguments and the environment vars.
 func getOptionsFrom(args, env []string) (*options, error) {
 	opts := &options{}
+	// Env fist.
 	opts.getEnv(env)
+	// Args overrule
 	if err := opts.parseArgs(args); err != nil {
 		return nil, err
 	}
@@ -50,10 +59,13 @@ func getOptionsFrom(args, env []string) (*options, error) {
 	return opts, nil
 }
 
+// getOptions gets the options from env and cli args.
 func getOptions() (*options, error) {
 	return getOptionsFrom(os.Args[1:], os.Environ())
 }
 
+// envVar takes a key=value string and returns the key and the value.
+// The value can contain the = char.
 func envVar(s string) (key string, value string) {
 	i := strings.Index(s, "=")
 	if i < 0 {
@@ -64,6 +76,7 @@ func envVar(s string) (key string, value string) {
 	return key, value
 }
 
+// getEnv parses the env vars into the options.
 func (o *options) getEnv(env []string) error {
 	for _, ev := range env {
 		k, v := envVar(ev)
@@ -176,6 +189,11 @@ func (o *options) validate() error {
 			errs = append(errs, fmt.Errorf("port is not numeric: %w", err))
 		}
 	}
+
+	if !o.changeMethodsSet {
+		o.changeMethods = append(o.changeMethods, cewrap.DefaultChangeMethods...)
+	}
+
 	if len(errs) > 0 {
 		return errors.Join(errs...)
 	}
@@ -221,4 +239,3 @@ func (o *options) getSourceOptions() (cewrap.SourceOptions, error) {
 	)
 	return so, nil
 }
-

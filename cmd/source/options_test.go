@@ -3,6 +3,7 @@ package main
 import (
 	"testing"
 
+	"github.com/myhops/cewrap"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -105,6 +106,8 @@ func TestArgs(t *testing.T) {
 	}
 }
 
+var defaultChangeMethods = cewrap.DefaultChangeMethods
+
 func TestArgsEnv(t *testing.T) {
 	cases := []struct {
 		name string
@@ -121,11 +124,12 @@ func TestArgsEnv(t *testing.T) {
 				"-downstream=http://example.com/downstream",
 			},
 			want: &options{
-				sink:       "http://example.com/sink",
-				port:       "9090",
-				downstream: "http://example.com/downstream",
-				logFormat:  "text",
-				logLevel:   "info",
+				sink:          "http://example.com/sink",
+				port:          "9090",
+				downstream:    "http://example.com/downstream",
+				logFormat:     "text",
+				logLevel:      "info",
+				changeMethods: []string{"POST", "DELETE", "PATCH", "PUT"},
 			},
 		},
 		{
@@ -141,11 +145,12 @@ func TestArgsEnv(t *testing.T) {
 				"-downstream=http://example.com/downstream",
 			},
 			want: &options{
-				sink:       "http://example.com/sink",
-				port:       "9090",
-				downstream: "http://example.com/downstream",
-				logFormat:  "text",
-				logLevel:   "info",
+				sink:          "http://example.com/sink",
+				port:          "9090",
+				downstream:    "http://example.com/downstream",
+				logFormat:     "text",
+				logLevel:      "info",
+				changeMethods: []string{"POST", "DELETE", "PATCH", "PUT"},
 			},
 		},
 		{
@@ -161,11 +166,12 @@ func TestArgsEnv(t *testing.T) {
 				"-downstream", "http://example.com/downstream",
 			},
 			want: &options{
-				sink:       "http://example.com/sink",
-				port:       "9090",
-				downstream: "http://example.com/downstream",
-				logFormat:  "text",
-				logLevel:   "info",
+				sink:          "http://example.com/sink",
+				port:          "9090",
+				downstream:    "http://example.com/downstream",
+				logFormat:     "text",
+				logLevel:      "info",
+				changeMethods: []string{"POST", "DELETE", "PATCH", "PUT"},
 			},
 		},
 		{
@@ -185,15 +191,45 @@ func TestArgsEnv(t *testing.T) {
 				"-downstream", "http://example.com/downstream",
 			},
 			want: &options{
-				sink:          "http://example.com/sink",
-				port:          "9090",
-				downstream:    "http://example.com/downstream",
-				changeMethods: []string{"PUT", "POST"},
-				source:        "source",
-				dataschema:    "dataschema",
-				typePrefix:    "typeprefix",
-				logFormat:     "text",
-				logLevel:      "info",
+				sink:             "http://example.com/sink",
+				port:             "9090",
+				downstream:       "http://example.com/downstream",
+				source:           "source",
+				dataschema:       "dataschema",
+				typePrefix:       "typeprefix",
+				logFormat:        "text",
+				logLevel:         "info",
+				changeMethods:    []string{"PUT", "POST"},
+				changeMethodsSet: true,
+			},
+		},
+		{
+			name: "methods",
+			env: []string{
+				"K_SINK=http://example.com/sinkenv",
+				"PORT=7070",
+				"CEW_DOWNSTREAM=http://example.com/downstreamenv",
+				"CEW_EXTRA_METHODS=GET",
+				"CEW_DATASCHEMA=dataschema",
+				"CEW_SOURCE=source",
+				"CEW_TYPE_PREFIX=typeprefix",
+			},
+			args: []string{
+				"-sink", "http://example.com/sink",
+				"-port", "9090",
+				"-downstream", "http://example.com/downstream",
+			},
+			want: &options{
+				sink:             "http://example.com/sink",
+				port:             "9090",
+				downstream:       "http://example.com/downstream",
+				source:           "source",
+				dataschema:       "dataschema",
+				typePrefix:       "typeprefix",
+				logFormat:        "text",
+				logLevel:         "info",
+				changeMethods:    []string{"GET", "POST", "DELETE", "PATCH", "PUT"},
+				changeMethodsSet: false,
 			},
 		},
 	}

@@ -219,8 +219,8 @@ func (o *options) validate() error {
 	return nil
 }
 
-func (o *options) getSourceOptions() (cewrap.SourceOptions, error) {
-	var so cewrap.SourceOptions
+func (o *options) getSourceOptions() ([]cewrap.SourceOption, error) {
+	var so []cewrap.SourceOption
 
 	// create the sink
 	sink, err := client.NewHTTP(cloudevents.WithTarget(o.sink))

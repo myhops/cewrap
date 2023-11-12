@@ -8,61 +8,78 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 )
 
-type sourceOption func(s *Source)
-type SourceOptions []sourceOption
-
-func WithDownstream(u string) sourceOption {
-	return func(s *Source) {
-		if uu, err := url.Parse(u); err == nil {
-			s.downstream = uu
-		}
-	}
+type SourceOption interface {
+	apply(s *Source)
 }
 
-func WithSink(sink cloudevents.Client) sourceOption {
-	return func(s *Source) {
-		s.sink = sink
+type downStream string
+
+func (ds downStream) apply(s *Source) {
+	if uu, err := url.Parse(string(ds)); err == nil {
+		s.downstream = uu
 	}
 }
-
-func WithHTTPClient(c *http.Client) sourceOption {
-	return func(s *Source) {
-		s.client = c
-	}
+func WithDownstream(u string) SourceOption {
+	return downStream(u)
 }
 
-func WithChangeMethods(m []string) sourceOption {
-	return func(s *Source) {
-		s.changeMethods = m
-	}
+type sink struct{ c cloudevents.Client }
+
+func (si sink) apply(s *Source) { s.sink = si.c }
+
+func WithSink(s cloudevents.Client) SourceOption { return &sink{c: s} }
+
+type httpClient struct {
+	c *http.Client
 }
 
-func WithSource(v string) sourceOption {
-	return func(s *Source) {
-		s.source = v
-	}
+func (c *httpClient) apply(s *Source) {
+	s.client = c.c
+}
+func WithHTTPClient(c *http.Client) SourceOption {
+	return &httpClient{c: c}
 }
 
-func WithTypePrefix(v string) sourceOption {
-	return func(s *Source) {
-		s.typePrefix = v
-	}
+type changeMethods []string
+
+func (c changeMethods) apply(s *Source) {
+	s.changeMethods = c
+}
+func WithChangeMethods(m []string) SourceOption {
+	return changeMethods(m)
 }
 
-func WithPathPrefix(v string) sourceOption {
-	return func(s *Source) {
-		s.pathPrefix = v
-	}
+type source string
+
+func (ss source) apply(s *Source) { s.source = string(ss) }
+func WithSource(v string) SourceOption {
+	return source(v)
 }
 
-func WithDataschema(v string) sourceOption {
-	return func(s *Source) {
-		s.dataschema = v
-	}
+type prefix string
+
+func (p prefix) apply(s *Source) { s.typePrefix = string(p) }
+func WithTypePrefix(v string) SourceOption {
+	return prefix(v)
 }
 
-func WithLogger(l *slog.Logger) sourceOption {
-	return func(s *Source) {
-		s.logger = l
-	}
+type pathPrefix string
+
+func (p pathPrefix) apply(s *Source) { s.pathPrefix = string(p) }
+func WithPathPrefix(v string) SourceOption {
+	return pathPrefix(v)
+}
+
+type dataSchema string
+
+func (d dataSchema) apply(s *Source) { s.dataschema = string(d) }
+func WithDataschema(v string) SourceOption {
+	return dataSchema(v)
+}
+
+type loggerOption struct{ l *slog.Logger }
+
+func (l loggerOption) apply(s *Source) { s.logger = l.l }
+func WithLogger(l *slog.Logger) SourceOption {
+	return loggerOption{l: l}
 }

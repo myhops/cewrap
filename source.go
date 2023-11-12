@@ -47,10 +47,10 @@ func (s *Source) isChange(method string) bool {
 	return false
 }
 
-func NewSource(options ...sourceOption) *Source {
+func NewSource(options ...SourceOption) *Source {
 	s := &Source{}
 	for _, opt := range options {
-		opt(s)
+		opt.apply(s)
 	}
 
 	if s.client == nil {

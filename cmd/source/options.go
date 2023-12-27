@@ -190,6 +190,7 @@ func (o *options) validate() error {
 		}
 	}
 
+	// Append the default change methods.
 	if !o.changeMethodsSet {
 		o.changeMethods = append(o.changeMethods, cewrap.DefaultChangeMethods...)
 	}

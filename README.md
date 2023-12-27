@@ -24,7 +24,7 @@ The data will contain a json struct with the response body the downstream servic
 
 Assume the downstream service is on `service.example.com` and it returns json formatted responses with person information.
 
-A successful post request to `http://service.example.com/persons/id12345` resource that contains persons will result in an event with the following attributes.
+A successful post request to `http://service.example.com/persons/id12345` resource that contains persons will result in an event with the following attributes:
 
 - subject: `/persons/id12345`
 - type: `com.example.persons.post_handled`
@@ -36,12 +36,12 @@ A successful post request to `http://service.example.com/persons/id12345` resour
 |-----------|---------|-------------|
 | -sink     | K_SINK, CWE_SINK | The url of the event sink. |
 | -source   | CEW_SOURCE | The source of the event. |
-| -type     | CEW_TYPE_PREFIX | The prefix for the type. |
+| -type     | CEW_TYPE_PREFIX | The prefix for the event type. |
 | -dataschema | CEW_DATASCHEMA | The URL for the dataschema of the event data. |
 | -downstream | CEW_DOWNSTREAM | Downstream service. |
 | -port | PORT | Listening port of the wrapper, defaults to 8080. |seperated list of methods that should generate events. Use this to specify less than the default state changing methods. |
-| -extra-methods | CEW_EXTRA_METHODS | Extra methods to add to the standard state changing methods |
-
+| -extra-methods | CEW_EXTRA_METHODS | Extra methods to add to the standard state changing methods. The default methods that result in an event are POST, PUT, PATCH and DELETE. |
+| -change-methods | CEW_CHANGE_METHODS | The list of methods that should emit an event. When both -extra-methods and -change-methods are combined when used both. | 
 
 ## Test setup
 

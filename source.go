@@ -26,8 +26,12 @@ type Source struct {
 	// Path prefix, when set, removes the prefix from the path that is set in the event source.
 	pathPrefix string
 	// Dataschema for the event.
-	dataschema string
+	dataSchema string
 
+	// When true, emit in a go routine.
+	asyncEmit bool	
+
+	// logger
 	logger *slog.Logger
 }
 
@@ -76,7 +80,7 @@ func (s *Source) isEmitEvent(method string) bool {
 // It passes the request to the downstream service and generates a cloud event
 // and sends it to the sink.
 func (s *Source) Handler() http.HandlerFunc {
-	// Initialize the variables common to all requests.
+	// Initialize the log variables common to all requests.
 	logger := s.logger.With(slog.String("operation", "Handle"))
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -99,17 +103,24 @@ func (s *Source) Handler() http.HandlerFunc {
 		}
 		logger.Info("successfully proxied request")
 
+		emit := func() {
+			// Emit the event.
+			logger.Info("emitting event")
+			err = svcReq.emitEvent(ctx)
+			if err != nil {
+				logger.Error("emitEvent failed", slog.String("err", err.Error()))
+			}
+			logger.Info("emitted event")
+		}
 		// Check if an event needs to be emitted.
-		if !s.isEmitEvent(r.Method) {
-			logger.Info("skip emitting event")
+		if s.isEmitEvent(r.Method) {
+			if s.asyncEmit {
+				go emit()
+				return
+			}
+			emit()
 			return
 		}
-		// Emit the event.
-		logger.Info("emitting event")
-		err = svcReq.emitEvent(ctx)
-		if err != nil {
-			logger.Error("emitEvent failed", slog.String("err", err.Error()))
-		}
-		logger.Info("emitted event")
+		logger.Info("skip emitting event")
 	}
 }

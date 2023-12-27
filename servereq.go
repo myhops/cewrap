@@ -19,14 +19,15 @@ type serviceRequest struct {
 	s      *Source
 	logger *slog.Logger
 
-	ctx context.Context
-
 	responseBody []byte
 	method       string
 	requestPath  string
 	contentType  string
 }
 
+// callDownstream calls the downstream service and writes the response to the original caller.
+//
+// When err == nil, then w cannot be used anymore.
 func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
 	logger := s.logger.With(slog.String("receiver_method", "callDownstream"))
 
@@ -85,6 +86,9 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 	evt.SetSource(s.s.source)
 	evt.SetType(s.s.typePrefix + "." + strings.ToLower(s.method) + typeSuffix)
 	evt.SetSubject(s.requestPath)
+	if s.s.dataSchema != "" {
+		evt.SetDataSchema(s.s.dataSchema)
+	}
 
 	const jsonType = "application/json"
 
@@ -169,7 +173,6 @@ func (s *serviceRequest) saveRequestData(r *http.Request) {
 	us.Scheme = r.URL.Scheme
 	us.Host = r.Host
 	us.Path = r.URL.Path
-	us.Scheme = "http"
 
 	s.requestPath = us.Path
 	if strings.Index(s.requestPath, s.s.pathPrefix) == 0 {

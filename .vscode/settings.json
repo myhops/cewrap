@@ -1,3 +1,6 @@
 {
-    "go.diagnostic.vulncheck": "Imports"
+    "go.diagnostic.vulncheck": "Imports",
+    "cSpell.enableFiletypes": [
+        "!yaml"
+    ]
 }

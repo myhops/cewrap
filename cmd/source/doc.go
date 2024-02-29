@@ -1,6 +1,6 @@
 /*
 The source command implements a proxy server that emits cloud events when
-it successfully handled a method that changes the data in the downstream service.
+it successfully handles a method that changes the data in the downstream service.
 
 It logs to standard error, currently in structured text format and with Info log level.
 

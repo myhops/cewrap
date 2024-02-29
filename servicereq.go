@@ -15,26 +15,18 @@ import (
 	"github.com/google/uuid"
 )
 
-type serviceRequest struct {
+type proxyRequest struct {
 	s      *Source
 	logger *slog.Logger
-
-	responseBody []byte
-	method       string
-	requestPath  string
-	contentType  string
 }
 
-// callDownstream calls the downstream service and writes the response to the original caller.
-//
-// When err == nil, then w cannot be used anymore.
-func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
-	logger := s.logger.With(slog.String("receiver_method", "callDownstream"))
+func (p *proxyRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	logger := p.logger.With(slog.String("receiver_method", "callDownstream"))
 
 	// Build a client request from the server request.
 	ctx, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
-	cr, err := s.buildDownstreamRequest(ctx, r)
+	cr, err := p.buildDownstreamRequest(ctx, r)
 	if err != nil {
 		return fmt.Errorf("error building downstream request: %w", err)
 	}
@@ -46,7 +38,7 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 	)
 
 	// Call the downstream service.
-	resp, err := s.s.client.Do(cr)
+	resp, err := p.s.client.Do(cr)
 	if err != nil {
 		return fmt.Errorf("error calling downstream service: %w", err)
 	}
@@ -60,10 +52,80 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 
 	logger.Info("called the downstream service")
 	// Create the response and write it out to the responseWriter.
-	err = s.writeResponse(w, resp, bytes.NewReader(body))
+	err = p.writeResponse(w, resp, bytes.NewReader(body))
 	if err != nil {
 		logger.Error("error sending the response", slog.String("err", err.Error()))
 		return fmt.Errorf("error sending the response: %w", err)
+	}
+
+	return nil
+}
+
+// writeResponse writes the info from resp to w.
+func (p *proxyRequest) writeResponse(w http.ResponseWriter, resp *http.Response, body io.Reader) error {
+	// Copy the headers.
+	for k, h := range resp.Header {
+		for _, hh := range h {
+			w.Header().Add(k, hh)
+		}
+	}
+
+	// Write the headers with the status code.
+	w.WriteHeader(resp.StatusCode)
+
+	// Write the body.
+	if _, err := io.Copy(w, body); err != nil {
+		return fmt.Errorf("error parsing content-length: %w", err)
+	}
+	return nil
+}
+
+func (p *proxyRequest) buildDownstreamRequest(ctx context.Context, r *http.Request) (*http.Request, error) {
+	// Get the body.
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		return nil, err
+	}
+	r.Body.Close()
+
+	// Build the downstream path.
+	du, err := url.JoinPath(p.s.downstream.String(), r.URL.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	// Create the request.
+	req, err := http.NewRequestWithContext(ctx, r.Method, du, bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+
+	// Copy the headers.
+	for k, h := range r.Header {
+		for _, hh := range h {
+			req.Header.Add(k, hh)
+		}
+	}
+	return req, nil
+}
+
+
+type serviceRequest struct {
+	proxyRequest
+
+	responseBody []byte
+	method       string
+	requestPath  string
+	contentType  string
+}
+
+// callDownstream calls the downstream service and writes the response to the original caller.
+//
+// When err == nil, then w cannot be used anymore.
+func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWriter, r *http.Request) error {
+	err := s.proxyRequest.callDownstream(ctx, w, r)
+	if err != nil {
+		return err
 	}
 
 	if !s.s.isEmitEvent(r.Method) {
@@ -71,9 +133,9 @@ func (s *serviceRequest) callDownstream(ctx context.Context, w http.ResponseWrit
 	}
 
 	// Save event data.
-	s.responseBody = body
-	s.contentType = resp.Header.Get("content-type")
-	s.saveRequestData(cr)
+	// s.responseBody = body
+	// s.contentType = resp.Header.Get("content-type")
+	// s.saveRequestData(cr)
 	return nil
 }
 
@@ -81,7 +143,7 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 	const typeSuffix = "_handled"
 
 	evt := cloudevents.NewEvent()
-	id, _ := uuid.NewUUID()
+	id := uuid.New()
 	evt.SetID(id.String())
 	evt.SetSource(s.s.source)
 	evt.SetType(s.s.typePrefix + "." + strings.ToLower(s.method) + typeSuffix)
@@ -89,6 +151,7 @@ func (s *serviceRequest) emitEvent(ctx context.Context) error {
 	if s.s.dataSchema != "" {
 		evt.SetDataSchema(s.s.dataSchema)
 	}
+	evt.SetTime(time.Now())
 
 	const jsonType = "application/json"
 

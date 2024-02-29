@@ -1,0 +1,32 @@
+# https://taskfile.dev
+
+version: '3'
+
+env:
+  IMAGECMD: podman
+  IMAGETAG_REGISTRY: docker.io/peterzandbergen/cesourcewrap
+  IMAGETAG_TAG: v0.0.1
+
+tasks:
+  default:
+    deps:
+      - image
+    silent: true
+
+  test:
+    cmds:
+      - CGO_ENABLED=0 go test ./...
+ 
+  build:
+    cmds:
+      - CGO_ENABLED=0 go build -o ./bin/source ./cmd/source
+
+  image:
+    deps: 
+      - build
+    cmds:
+      - $IMAGECMD build --tag $IMAGETAG_REGISTRY:$IMAGETAG_TAG -f docker/Dockerfile .
+
+  push:
+    cmds:
+      - $IMAGECMD push $IMAGETAG_REGISTRY:$IMAGETAG_TAG

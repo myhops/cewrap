@@ -39,9 +39,9 @@ A successful post request to `http://service.example.com/persons/id12345` resour
 | -type     | CEW_TYPE_PREFIX | The prefix for the event type. |
 | -dataschema | CEW_DATASCHEMA | The URL for the dataschema of the event data. |
 | -downstream | CEW_DOWNSTREAM | Downstream service. |
-| -port | PORT | Listening port of the wrapper, defaults to 8080. |seperated list of methods that should generate events. Use this to specify less than the default state changing methods. |
+| -port | PORT | Listening port of the wrapper, defaults to 8080. |
 | -extra-methods | CEW_EXTRA_METHODS | Extra methods to add to the standard state changing methods. The default methods that result in an event are POST, PUT, PATCH and DELETE. |
-| -change-methods | CEW_CHANGE_METHODS | The list of methods that should emit an event. When both -extra-methods and -change-methods are combined when used both. | 
+| -change-methods | CEW_CHANGE_METHODS | The list of methods that should emit an event. -extra-methods and -change-methods are combined when used both. | 
 
 ## Test setup
 

@@ -1,12 +1,15 @@
 package cewrap
 
 import (
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+	"github.com/google/uuid"
 )
 
 type Source struct {
@@ -29,7 +32,7 @@ type Source struct {
 	dataSchema string
 
 	// When true, emit in a go routine.
-	asyncEmit bool	
+	asyncEmit bool
 
 	// logger
 	logger *slog.Logger
@@ -75,6 +78,52 @@ func (s *Source) isEmitEvent(method string) bool {
 	return s.sink != nil && s.isChange(method)
 }
 
+func (s *Source) proxyRequest(logger *slog.Logger, w http.ResponseWriter, r *http.Request) (*ProxiedRequest, error) {
+	// Save the request.
+	sreq, err := SaveRequest(r)
+	if err != nil {
+		// write error
+		return nil, fmt.Errorf("error saving request: %w", err)
+	}
+
+	req, err := sreq.Request(r.Context(), s.downstream.String())
+	if err != nil {
+		// write error
+		logger.Error("creating downstream request", slog.String("err", err.Error()))
+		return nil, fmt.Errorf("error creating downstream request: %w", err)
+	}
+
+	// Call the downstream service.
+	resp, err := s.client.Do(req)
+	if err != nil {
+		// write error
+		return nil, fmt.Errorf("error calling downstream service: %w", err)
+	}
+	// Save the response.
+	sresp, err := SaveResponse(resp)
+	if err != nil {
+		// write error
+		return nil, fmt.Errorf("error saving response: %w", err)
+	}
+
+	// Write the response.
+	if err := sresp.Write(w); err != nil {
+		// write error
+
+		logger.Error("saving response", slog.String("err", err.Error()))
+		return nil, fmt.Errorf("error writing the response response: %w", err)
+	}
+	return &ProxiedRequest{
+		request:  sreq,
+		response: sresp,
+	}, nil
+}
+
+func (s *Source) mayEmit(req *http.Request) bool {
+	return false
+}
+
+
 // Handler returns a HandlerFunc that handles the requests.
 //
 // It passes the request to the downstream service and generates a cloud event
@@ -88,39 +137,67 @@ func (s *Source) Handler() http.HandlerFunc {
 			logger.Info("Handle served", slog.Duration("duration", time.Since(start)))
 		}(time.Now())
 
-		// Create and init a serviceRequest.
-		svcReq := &serviceRequest{}
-		svcReq.logger = logger.With(slog.String("request", r.URL.Path))
-		svcReq.s = s
+		// Test if the request may emit an event.
+		// if ! s.mayEmit(req) {
 
-		ctx := r.Context()
-		err := svcReq.callDownstream(ctx, w, r)
+		// }
+
+		pr, err := s.proxyRequest(s.logger, w, r)
 		if err != nil {
-			// write error
-			w.WriteHeader(http.StatusInternalServerError)
-			logger.Error("error calling downstream", slog.String("err", err.Error()))
+			http.Error(w, fmt.Sprintf("error proxying the request: %s", err.Error()), http.StatusInternalServerError)
 			return
 		}
 		logger.Info("successfully proxied request")
 
-		emit := func() {
-			// Emit the event.
-			logger.Info("emitting event")
-			err = svcReq.emitEvent(ctx)
-			if err != nil {
-				logger.Error("emitEvent failed", slog.String("err", err.Error()))
-			}
-			logger.Info("emitted event")
-		}
-		// Check if an event needs to be emitted.
-		if s.isEmitEvent(r.Method) {
-			if s.asyncEmit {
-				go emit()
-				return
-			}
-			emit()
+		// Determine if an event needs to be emitted.
+		if !s.isEmitEvent(pr.request.method) {
 			return
 		}
-		logger.Info("skip emitting event")
+
+		// Create and emit the event.
+		s.emitEvent(logger, pr)
 	}
+}
+
+func (s *Source) emitEvent(logger *slog.Logger, pr *ProxiedRequest) {
+	// Construct the event.
+	evt := cloudevents.NewEvent()
+	evt.SetID(uuid.NewString())
+	evt.SetSource(s.source)
+	evt.SetType(fmt.Sprintf("%s.%s%s", s.typePrefix, pr.request.method, "_handled"))
+	evt.SetSubject(pr.request.path)
+
+	if s.dataSchema != "" {
+		evt.SetDataSchema(s.dataSchema)
+	}
+
+	const jsonType = "application/json"
+
+	// Set the data
+	contentType := pr.response.header.Get("Content-Type")
+	if strings.Index(contentType, jsonType) == 0 {
+		// Copied from Event.SetData for data is not a byte array.
+		evt.SetDataContentType(jsonType)
+		// evt.DataEncoded = p.response.body
+		evt.DataBase64 = false
+	} else {
+		// evt.SetData(contentType, p.response.body)
+	}
+
+	emit := func() {
+		// Emit the event.
+		logger.Info("emitting event")
+		// err = svcReq.emitEvent(ctx)
+		// if err != nil {
+		// 	logger.Error("emitEvent failed", slog.String("err", err.Error()))
+		// }
+		logger.Info("emitted event")
+	}
+	// Check if an event needs to be emitted.
+	if s.asyncEmit {
+		go emit()
+		return
+	}
+	emit()
+	logger.Info("skip emitting event")
 }

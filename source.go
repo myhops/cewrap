@@ -28,7 +28,7 @@ type Source struct {
 	typePrefix string
 	// Path prefix, when set, removes the prefix from the path that is set in the event source.
 	pathPrefix string
-	// Dataschema for the event.
+	// DataSchema for the event.
 	dataSchema string
 
 	// When true, emit in a go routine.
@@ -123,6 +123,20 @@ func (s *Source) mayEmit(req *http.Request) bool {
 	return false
 }
 
+func (s *Source) TappingHandler() http.HandlerFunc {
+	tap := &DummyTap{}
+	return func(w http.ResponseWriter, r *http.Request) {
+		req, _ := tap.Start(r)
+
+		// Call the downstream service.
+		resp, err := s.client.Do(req)
+		if err != nil {
+			// write error
+			return
+		}
+		tap.Finish(w, resp)
+	}
+}
 
 // Handler returns a HandlerFunc that handles the requests.
 //

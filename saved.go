@@ -88,7 +88,7 @@ func (s *SavedRequest) Request(ctx context.Context, downstream string) (*http.Re
 	if err != nil {
 		return nil, err
 	}
-	// Create the reqquest.
+	// Create the request.
 	req, err := http.NewRequestWithContext(ctx, s.method, du, bytes.NewReader(s.body))
 	if err != nil {
 		return nil, err

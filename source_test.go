@@ -76,7 +76,7 @@ func TestHandleWithWith(t *testing.T) {
 		WithHTTPClient(&http.Client{}),
 		WithSink(sink),
 		WithChangeMethods(DefaultChangeMethods),
-		WithLogger(slog.Default()),
+		// WithLogger(slog.Default()),
 		WithSource("https://testservice.example.com/testapi"),
 	)
 	_ = s

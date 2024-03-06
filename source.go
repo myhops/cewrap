@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/http/httputil"
 	"net/url"
 	"strings"
 	"time"
@@ -13,6 +14,8 @@ import (
 )
 
 type Source struct {
+	proxy *httputil.ReverseProxy
+
 	// The downstream service.
 	downstream *url.URL
 	// sink is the url that sinks the events
@@ -71,7 +74,22 @@ func NewSource(options ...SourceOption) *Source {
 			slog.String("service", "Source"),
 		)
 	}
+	s.proxy = &httputil.ReverseProxy{
+		Rewrite:        s.rewrite,
+		ModifyResponse: s.modifyResponse,
+	}
 	return s
+}
+
+func (s *Source) rewrite(pr *httputil.ProxyRequest) {
+	// Add the target.
+	pr.SetURL(s.downstream)
+}
+
+// modifyResponse generates an event if necessary.
+func (s *Source) modifyResponse(r *http.Response) error {
+	
+	return nil
 }
 
 func (s *Source) isEmitEvent(method string) bool {
@@ -124,17 +142,17 @@ func (s *Source) mayEmit(req *http.Request) bool {
 }
 
 func (s *Source) TappingHandler() http.HandlerFunc {
-	tap := &DummyTap{}
+	// tap := &DummyTap{}
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, _ := tap.Start(r)
+		// req, _ := tap.Start(r)
 
-		// Call the downstream service.
-		resp, err := s.client.Do(req)
-		if err != nil {
-			// write error
-			return
-		}
-		tap.Finish(w, resp)
+		// // Call the downstream service.
+		// resp, err := s.client.Do(req)
+		// if err != nil {
+		// 	// write error
+		// 	return
+		// }
+		// tap.Finish(w, resp)
 	}
 }
 

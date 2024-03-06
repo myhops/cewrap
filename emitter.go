@@ -1,10 +1,12 @@
 package cewrap
 
-type Emitter struct {
+type Emitter interface {}
 
+type CEEmitter struct {
+	
 }
 
-func New() *Emitter {
+func New() *CEEmitter {
 	return nil
 }
 
@@ -15,7 +17,7 @@ func New() *Emitter {
 // 	- Type
 // 	- Subject
 // 	- Data
-func (e *Emitter) Emit() error {
+func (e *CEEmitter) Emit() error {
 	return nil
 }
 

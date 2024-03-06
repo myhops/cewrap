@@ -97,7 +97,7 @@ type loggerOption struct{ l *slog.Logger }
 
 func (l loggerOption) apply(s *Source) { s.logger = l.l }
 
-// WithLogger sets the logger.
-func WithLogger(l *slog.Logger) SourceOption {
-	return loggerOption{l: l}
-}
+// // WithLogger sets the logger.
+// func WithLogger(l *slog.Logger) SourceOption {
+// 	return loggerOption{l: l}
+// }

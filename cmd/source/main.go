@@ -50,7 +50,7 @@ func main() {
 	}
 
 	// Add the logger.
-	so = append(so, cewrap.WithLogger(logger))
+	// so = append(so, cewrap.WithLogger(logger))
 	// Create the source.
 	s := cewrap.NewSource(so...)
 

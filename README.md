@@ -69,3 +69,26 @@ podman run --rm \
     -p 10000:80 \
     gcr.io/knative-releases/knative.dev/eventing/cmd/event_display
 ```
+
+```mermaid
+%% Example of sequence diagram
+  sequenceDiagram
+    ServeMux->>ReverseProxy: ServeHTTP
+    ReverseProxy->>Spy: Rewrite
+    Spy-->ProxyRequest: SetURL
+    Spy->>Spy: newTap
+    Spy->>Tap: Start
+    Tap->>Tap: collect data
+    Spy-->>ReverseProxy: return
+    ReverseProxy-->ReverseProxy: call upstream
+    ReverseProxy->>Spy: ModifyResponse
+    
+    Spy-->>Tap: End 
+    Tap->>Tap: collect data
+    Tap->>Tap: create emitter
+    Tap->>Emitter: Emit
+    Tap-->>Spy: return
+    Spy-->>ReverseProxy: return
+    
+    Emitter->>Emitter: emit logging or event
+```

@@ -8,29 +8,30 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"strings"
 	"testing"
 )
 
 func TestStraightTrough(t *testing.T) {
 	cases := []struct {
-		name string
+		name   string
 		method string
-		path string
+		path   string
 	}{
 		{
-			name: "root",
+			name:   "root",
 			method: http.MethodGet,
-			path: "/",
+			path:   "/",
 		},
 		{
-			name: "some path",
+			name:   "some path",
 			method: http.MethodGet,
-			path: "/some/path",
+			path:   "/some/path",
 		},
 	}
 
 	for _, cc := range cases {
-		t.Run(cc.name, func(t *testing.T)  {
+		t.Run(cc.name, func(t *testing.T) {
 			var responseBody = []byte("dasfadfaefacvv vasdfad asdfasd")
 			// upstream server
 			us := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -77,48 +78,64 @@ func TestStraightTrough(t *testing.T) {
 
 func TestTapper(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	tap := &loggingTap{l: logger.With("tap", "allTap")}
+	newAllTap := func() Tap {
+		return &loggingTap{l: logger.With("tap", "allTap")}
+	}
 
-	getTap := &loggingTap{l: logger.With("tap", "getTap")}
+	newGetTap := func() Tap {
+		return &loggingTap{l: logger.With("tap", "getTap")}
+	}
+
+	newPutTap := func() Tap {
+		return &BodyRecordingTap{}
+	}
 
 	cases := []struct {
-		name string
-		method string
-		path string
+		name    string
+		method  string
+		path    string
 		options []option
+		body    string
 	}{
 		{
-			name: "root",
-			method: http.MethodGet,
-			path: "/get",
-			options: []option{WithLogger(logger), WithTap([]string{"/get"},tap)},
+			name:    "root",
+			method:  http.MethodGet,
+			path:    "/get",
+			options: []option{WithLogger(logger), WithTap([]string{"/get"}, newAllTap)},
 		},
 		{
-			name: "some path tap",
+			name:    "some path tap",
+			method:  http.MethodPut,
+			path:    "/some/path",
+			options: []option{WithLogger(logger), WithTap([]string{"/some/path"}, newGetTap)},
+		},
+		{
+			name:    "some path getTap",
+			method:  http.MethodGet,
+			path:    "/some/path",
+			options: []option{WithLogger(logger), WithTap([]string{"/some/path"}, newGetTap)},
+		},
+		{
+			name:   "some path multiTap",
 			method: http.MethodPut,
-			path: "/some/path",
-			options: []option{WithLogger(logger), WithTap([]string{"/some/path"}, tap)},
-		},
-		{
-			name: "some path getTap",
-			method: http.MethodGet,
-			path: "/some/path",
-			options: []option{WithLogger(logger), WithTap([]string{"/some/path"}, getTap)},
-		},
-		{
-			name: "some path multiTap",
-			method: http.MethodPut,
-			path: "/some/path",
+			path:   "/some/path",
 			options: []option{
-					WithLogger(logger), 
-					WithTap([]string{"PUT /some/path"}, getTap),
-					WithTap([]string{"/some/path"}, tap),
-				},
+				WithLogger(logger),
+				WithTap([]string{"PUT /some/path"}, newGetTap),
+				WithTap([]string{"/some/path"}, newAllTap),
+			},
+		},
+		{
+			name:    "put path",
+			method:  http.MethodGet,
+			path:    "/put/path",
+			options: []option{WithLogger(logger), WithTap([]string{"/put/path"}, newPutTap)},
+			body: "Hallo Put",
 		},
 	}
 
 	for _, cc := range cases {
-		t.Run(cc.name, func(t *testing.T)  {
+		t.Run(cc.name, func(t *testing.T) {
 			var responseBody = []byte("dasfadfaefacvv vasdfad asdfasd")
 			// upstream server
 			us := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -138,7 +155,7 @@ func TestTapper(t *testing.T) {
 				t.Fatalf("error joining paths: %s", err.Error())
 			}
 
-			req, err := http.NewRequest(cc.method, reqURL, nil)
+			req, err := http.NewRequest(cc.method, reqURL, strings.NewReader(cc.body))
 			if err != nil {
 				t.Fatalf("error creating request: %s", err.Error())
 			}

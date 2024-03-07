@@ -2,10 +2,7 @@ package main
 
 import (
 	"log/slog"
-	"net/http"
 	"os"
-
-	"github.com/myhops/cewrap"
 )
 
 func newLogger(o *options) *slog.Logger {
@@ -36,31 +33,31 @@ func logOptions(o *options, l *slog.Logger) {
 }
 
 func main() {
-	opts, err := getOptions()
-	if err != nil {
-		slog.Default().Error("failed to get options", slog.String("err", err.Error()))
-		return
-	}
-	logger := newLogger(opts)
+	// opts, err := getOptions()
+	// if err != nil {
+	// 	slog.Default().Error("failed to get options", slog.String("err", err.Error()))
+	// 	return
+	// }
+	// logger := newLogger(opts)
 
-	so, err := opts.getSourceOptions()
-	if err != nil {
-		logger.Error("error creating sink", slog.String("err", err.Error()))
-		os.Exit(1)
-	}
+	// so, err := opts.getSourceOptions()
+	// if err != nil {
+	// 	logger.Error("error creating sink", slog.String("err", err.Error()))
+	// 	os.Exit(1)
+	// }
 
-	// Add the logger.
-	// so = append(so, cewrap.WithLogger(logger))
-	// Create the source.
-	s := cewrap.NewSource(so...)
+	// // Add the logger.
+	// // so = append(so, cewrap.WithLogger(logger))
+	// // Create the source.
+	// s := cewrap.NewSource(so...)
 
-	// Log the current options.
-	logOptions(opts, logger)
+	// // Log the current options.
+	// logOptions(opts, logger)
 
-	// Start server with the source.
-	la := ":" + opts.port
-	logger.Info("starting server", slog.String("listen_address", la))
-	if err := http.ListenAndServe(la, s.Handler()); err != nil {
-		logger.Error("server stopped", slog.String("err", err.Error()))
-	}
+	// // Start server with the source.
+	// la := ":" + opts.port
+	// logger.Info("starting server", slog.String("listen_address", la))
+	// if err := http.ListenAndServe(la, s.Handler()); err != nil {
+	// 	logger.Error("server stopped", slog.String("err", err.Error()))
+	// }
 }

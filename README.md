@@ -74,21 +74,36 @@ podman run --rm \
 %% Example of sequence diagram
   sequenceDiagram
     ServeMux->>ReverseProxy: ServeHTTP
+    create participant ProxyRequest
+    ReverseProxy->>ProxyRequest: in, out
     ReverseProxy->>Spy: Rewrite
-    Spy-->ProxyRequest: SetURL
-    Spy->>Spy: newTap
+    Spy-->>ProxyRequest: SetURL
+    
+    create participant Tap
     Spy->>Tap: Start
     Tap->>Tap: collect data
     Spy-->>ReverseProxy: return
+
     ReverseProxy-->ReverseProxy: call upstream
     ReverseProxy->>Spy: ModifyResponse
     
     Spy-->>Tap: End 
+
     Tap->>Tap: collect data
-    Tap->>Tap: create emitter
+    create participant Emitter
+    Tap->>Emitter: collected data
     Tap->>Emitter: Emit
-    Tap-->>Spy: return
+    Spy->Tap: return
+
+    destroy Tap
+    Spy-xTap: return
+    
     Spy-->>ReverseProxy: return
+
+    destroy ProxyRequest
+    ReverseProxy-xProxyRequest: release
+
+    ReverseProxy-->ServeMux: return
     
     Emitter->>Emitter: emit logging or event
 ```
